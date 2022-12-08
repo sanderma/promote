@@ -12,9 +12,9 @@ import (
 var environments = []string{"non-prod", "prod", "cde"}
 
 func main() {
+	var cmd *exec.Cmd
 
 	out, err := exec.Command("git", "diff", "--name-only", "master").Output()
-
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -34,8 +34,18 @@ func main() {
 			copyFile(source, dest)
 		}
 
+		currentBranch, err := exec.Command("git", "branch", "--show-current").Output()
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		cmd = exec.Command("git", "switch", "-C", string(currentBranch)+env)
+		if err := cmd.Run(); err != nil {
+			log.Fatal(err)
+		}
+
 		log.Println("add kubernetes/" + env)
-		cmd := exec.Command("git", "add", "kubernetes/"+env)
+		cmd = exec.Command("git", "add", "kubernetes/"+env)
 		if err := cmd.Run(); err != nil {
 			log.Fatal(err)
 		}
@@ -51,6 +61,12 @@ func main() {
 		if err := cmd.Run(); err != nil {
 			log.Println("Nothing to commit...")
 		}
+
+		cmd = exec.Command("git", "checkout", string(currentBranch))
+		if err := cmd.Run(); err != nil {
+			log.Fatal(err)
+		}
+
 		log.Println("Done " + env)
 	}
 }
