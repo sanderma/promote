@@ -23,7 +23,18 @@ func main() {
 
 	candidates := pattern.FindAll(out, -1)
 
+	// currentBranch, err := exec.Command("git", "branch", "--show-current").Output()
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+
 	for _, env := range environments {
+
+		log.Println("Switch to " + env)
+		cmd = exec.Command("git", "switch", "-C", env)
+		if err := cmd.Run(); err != nil {
+			log.Fatal(err)
+		}
 
 		for _, candidate := range candidates {
 
@@ -32,16 +43,6 @@ func main() {
 
 			fmt.Println("cp " + source + " " + dest)
 			copyFile(source, dest)
-		}
-
-		currentBranch, err := exec.Command("git", "branch", "--show-current").Output()
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		cmd = exec.Command("git", "switch", "-C", string(currentBranch)+env)
-		if err := cmd.Run(); err != nil {
-			log.Fatal(err)
 		}
 
 		log.Println("add kubernetes/" + env)
@@ -62,7 +63,7 @@ func main() {
 			log.Println("Nothing to commit...")
 		}
 
-		cmd = exec.Command("git", "checkout", string(currentBranch))
+		cmd = exec.Command("git", "checkout", "dev") //TODO dynamic
 		if err := cmd.Run(); err != nil {
 			log.Fatal(err)
 		}
