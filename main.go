@@ -10,14 +10,6 @@ import (
 var environments = []string{"non-prod", "prod", "cde"}
 
 func main() {
-	content := `
-	# comment line
-	kubernetes/staging/policies/opa/templates/k8srequiredannotations-template.yaml
-	terraform/staging/files.tf
-
-	# another comment line
-	onzinfiles/staging/lalalala
-`
 
 	out, err := exec.Command("git", "diff", "--name-only", "master").Output()
 
@@ -25,13 +17,14 @@ func main() {
 		log.Fatal(err)
 	}
 
-	fmt.Println(string(out))
+	pattern := regexp.MustCompile(`(kubernetes/|terraform/)staging(/.*)`)
 
-	// Regex pattern captures "key: value" pair from the content.
-	//pattern := regexp.MustCompile(`(^kubernetes\/|^terraform\/)(staging)`)
-	pattern := regexp.MustCompile(`(kubernetes/|terraform/)staging`)
+	candidates := pattern.FindAll(out, -1)
 
-	for _, env := range environments {
-		fmt.Println(pattern.ReplaceAllString(content, "${1}"+env))
+	for _, candidate := range candidates {
+
+		for _, env := range environments {
+			fmt.Println("cp " + string(candidate) + " " + pattern.ReplaceAllString(string(candidate), "${1}"+env+"${2}"))
+		}
 	}
 }
