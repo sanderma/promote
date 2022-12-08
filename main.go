@@ -29,22 +29,34 @@ func main() {
 
 			source := string(candidate)
 			dest := pattern.ReplaceAllString(string(candidate), "${1}"+env+"${2}")
+
 			fmt.Println("cp " + source + " " + dest)
 			copyFile(source, dest)
 		}
-		cmd := exec.Command("git", "add", "--all")
+
+		log.Println("add kubernetes/" + env)
+		cmd := exec.Command("git", "add", "kubernetes/"+env)
 		if err := cmd.Run(); err != nil {
 			log.Fatal(err)
 		}
 
-		cmd = exec.Command("git", "commit", "-m", "promote to "+env)
+		log.Println("add terraform/" + env)
+		cmd = exec.Command("git", "add", "terraform/"+env)
 		if err := cmd.Run(); err != nil {
 			log.Fatal(err)
 		}
+
+		log.Println("commit promote to " + env)
+		cmd = exec.Command("git", "commit", "-m", "promote to "+env)
+		if err := cmd.Run(); err != nil {
+			log.Println("Nothing to commit...")
+		}
+		log.Println("Done " + env)
 	}
 }
 
 func copyFile(s string, d string) {
+	var new *os.File
 	// Open original file
 	original, err := os.Open(s)
 	if err != nil {
@@ -53,10 +65,11 @@ func copyFile(s string, d string) {
 	defer original.Close()
 
 	// Create new file
-	new, err := os.Create(d)
+	new, err = os.Create(d)
 	if err != nil {
 		log.Fatal(err)
 	}
+
 	defer new.Close()
 
 	//This will copy
