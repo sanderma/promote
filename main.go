@@ -1,15 +1,18 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 )
 
 var environments = []string{"non-prod", "prod", "cde"}
+var currentBranch string
 
 func main() {
 	var cmd *exec.Cmd
@@ -23,15 +26,21 @@ func main() {
 
 	candidates := pattern.FindAll(out, -1)
 
-	// currentBranch, err := exec.Command("git", "branch", "--show-current").Output()
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
+	b, err := exec.Command("git", "branch", "--show-current").Output()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	currentBranch = string(bytes.TrimSuffix(b, []byte("\n")))
+
+	log.Println("Currentbranch : " + currentBranch)
 
 	for _, env := range environments {
 
-		log.Println("Switch to " + env)
-		cmd = exec.Command("git", "switch", "-C", env)
+		promoteBranchName := currentBranch + "-" + env
+
+		log.Println("Switch to " + promoteBranchName)
+		cmd = exec.Command("git", "switch", "-C", promoteBranchName)
 		if err := cmd.Run(); err != nil {
 			log.Fatal(err)
 		}
@@ -45,30 +54,36 @@ func main() {
 			copyFile(source, dest)
 		}
 
-		log.Println("add kubernetes/" + env)
-		cmd = exec.Command("git", "add", "kubernetes/"+env)
-		if err := cmd.Run(); err != nil {
-			log.Fatal(err)
-		}
-
-		log.Println("add terraform/" + env)
-		cmd = exec.Command("git", "add", "terraform/"+env)
-		if err := cmd.Run(); err != nil {
-			log.Fatal(err)
-		}
-
-		log.Println("commit promote to " + env)
-		cmd = exec.Command("git", "commit", "-m", "promote to "+env)
-		if err := cmd.Run(); err != nil {
-			log.Println("Nothing to commit...")
-		}
-
-		cmd = exec.Command("git", "checkout", "dev") //TODO dynamic
-		if err := cmd.Run(); err != nil {
-			log.Fatal(err)
-		}
+		gitPromote(env, currentBranch)
 
 		log.Println("Done " + env)
+	}
+}
+
+func gitPromote(env string, sourceBranch string) {
+	var cmd *exec.Cmd
+
+	log.Println("add kubernetes/" + env)
+	cmd = exec.Command("git", "add", "kubernetes/"+env)
+	if err := cmd.Run(); err != nil {
+		log.Fatal(err)
+	}
+
+	log.Println("add terraform/" + env)
+	cmd = exec.Command("git", "add", "terraform/"+env)
+	if err := cmd.Run(); err != nil {
+		log.Fatal(err)
+	}
+
+	log.Println("commit promote to " + env)
+	cmd = exec.Command("git", "commit", "-m", "promote to "+env)
+	if err := cmd.Run(); err != nil {
+		log.Println("Nothing to commit...")
+	}
+
+	cmd = exec.Command("git", "checkout", currentBranch)
+	if err := cmd.Run(); err != nil {
+		log.Fatal(err)
 	}
 }
 
@@ -80,6 +95,9 @@ func copyFile(s string, d string) {
 		log.Fatal(err)
 	}
 	defer original.Close()
+
+	//ensure the folder structure exists
+	ensureDir(d)
 
 	// Create new file
 	new, err = os.Create(d)
@@ -93,5 +111,15 @@ func copyFile(s string, d string) {
 	_, err = io.Copy(new, original)
 	if err != nil {
 		log.Fatal(err)
+	}
+}
+
+func ensureDir(fileName string) {
+	dirName := filepath.Dir(fileName)
+	if _, serr := os.Stat(dirName); serr != nil {
+		merr := os.MkdirAll(dirName, os.ModePerm)
+		if merr != nil {
+			panic(merr)
+		}
 	}
 }
