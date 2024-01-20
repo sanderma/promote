@@ -1,125 +1,68 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
-	"io"
 	"log"
 	"os"
-	"os/exec"
-	"path/filepath"
 	"regexp"
+	"strings"
+
+	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing"
 )
 
-var environments = []string{"non-prod", "prod", "cde"}
-var currentBranch string
+type TagCommit map[string]string
+
+type Apps map[string]TagCommit
+
+func (a Apps) List() {
+	for k := range a {
+		fmt.Println(k)
+	}
+}
 
 func main() {
-	var cmd *exec.Cmd
 
-	out, err := exec.Command("git", "diff", "--name-only", "master").Output()
+	deployments := make(Apps)
+
+	path, err := os.Getwd()
 	if err != nil {
-		log.Fatal(err)
+		log.Println(err)
 	}
 
-	pattern := regexp.MustCompile(`(kubernetes/|terraform/)staging(/.*)`)
-
-	candidates := pattern.FindAll(out, -1)
-
-	b, err := exec.Command("git", "branch", "--show-current").Output()
+	dir, err := os.ReadDir("./deployments")
 	if err != nil {
-		log.Fatal(err)
+		fmt.Println(err)
 	}
-
-	currentBranch = string(bytes.TrimSuffix(b, []byte("\n")))
-
-	log.Println("Currentbranch : " + currentBranch)
-
-	for _, env := range environments {
-
-		promoteBranchName := currentBranch + "-" + env
-
-		log.Println("Switch to " + promoteBranchName)
-		cmd = exec.Command("git", "switch", "-C", promoteBranchName)
-		if err := cmd.Run(); err != nil {
-			log.Fatal(err)
+	for _, d := range dir {
+		if !strings.HasPrefix(d.Name(), ".") {
+			deployments[d.Name()] = TagCommit{}
 		}
+	}
 
-		for _, candidate := range candidates {
+	deployments.List()
 
-			source := string(candidate)
-			dest := pattern.ReplaceAllString(string(candidate), "${1}"+env+"${2}")
+	repo, err := git.PlainOpen(path)
+	if err != nil {
+		log.Println(err)
+	}
+	tagrefs, err := repo.Tags()
+	if err != nil {
+		log.Println(err)
+	}
 
-			fmt.Println("cp " + source + " " + dest)
-			copyFile(source, dest)
+	regexEnv := regexp.MustCompile(`\w*$`)
+
+	//repo.Tag()
+	err = tagrefs.ForEach(func(t *plumbing.Reference) error {
+		n, found := strings.CutPrefix(t.Name().String(), "refs/tags/")
+
+		if found {
+			fmt.Println(regexEnv.FindString(n))
 		}
-
-		gitPromote(env, currentBranch)
-
-		log.Println("Done " + env)
-	}
-}
-
-func gitPromote(env string, sourceBranch string) {
-	var cmd *exec.Cmd
-
-	log.Println("add kubernetes/" + env)
-	cmd = exec.Command("git", "add", "kubernetes/"+env)
-	if err := cmd.Run(); err != nil {
-		log.Fatal(err)
-	}
-
-	log.Println("add terraform/" + env)
-	cmd = exec.Command("git", "add", "terraform/"+env)
-	if err := cmd.Run(); err != nil {
-		log.Fatal(err)
-	}
-
-	log.Println("commit promote to " + env)
-	cmd = exec.Command("git", "commit", "-m", "promote to "+env)
-	if err := cmd.Run(); err != nil {
-		log.Println("Nothing to commit...")
-	}
-
-	cmd = exec.Command("git", "checkout", currentBranch)
-	if err := cmd.Run(); err != nil {
-		log.Fatal(err)
-	}
-}
-
-func copyFile(s string, d string) {
-	var new *os.File
-	// Open original file
-	original, err := os.Open(s)
+		return nil
+	})
 	if err != nil {
-		log.Fatal(err)
-	}
-	defer original.Close()
-
-	//ensure the folder structure exists
-	ensureDir(d)
-
-	// Create new file
-	new, err = os.Create(d)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	defer new.Close()
-
-	//This will copy
-	_, err = io.Copy(new, original)
-	if err != nil {
-		log.Fatal(err)
-	}
-}
-
-func ensureDir(fileName string) {
-	dirName := filepath.Dir(fileName)
-	if _, serr := os.Stat(dirName); serr != nil {
-		merr := os.MkdirAll(dirName, os.ModePerm)
-		if merr != nil {
-			panic(merr)
-		}
+		log.Println(err)
 	}
 }
